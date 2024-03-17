@@ -1,0 +1,85 @@
+#!/usr/bin/env python3
+
+import os
+import argparse
+import subprocess
+
+parser = \
+argparse.ArgumentParser(
+  prog = r"dv_video_convert_to_x264_mp3_hardsub",
+  description = r"""This script prepares videos to play on low spec devices
+                    Converts a video file to use x264, mp3, and hardsubs.
+                    Keeps only the first tracks for video, audio, and subs.
+                    Discards all other tracks and metadata. Optionally
+                    overrides font family for subtitles.""" )
+
+parser.add_argument(r"file")
+parser.add_argument(r"-f", r"--font")
+parser.add_argument(r"-S", r"--fontsize", type=int, default=0)
+parser.add_argument(r"-a", r"--audiotrack", type=int, default=0)
+parser.add_argument(r"-v", r"--videotrack", type=int, default=0)
+parser.add_argument(r"-s", r"--subtrack", type=int, default=0)
+
+args = parser.parse_args()
+
+abs_fn = os.path.abspath(args.file);
+
+if not os.path.exists(abs_fn):
+  print(f"Cannot find file: {args.file}");
+  exit(1);
+
+out_base = os.path.basename(abs_fn);
+out_root, out_ext = os.path.splitext(out_base);
+out_fn = os.path.join(".", f"{out_root}_hardsub{out_ext}")
+
+command = [ "ffmpeg", ]
+
+#### Input File
+command.extend([ "-i", abs_fn, ])
+
+#### Map One Video and One Audio
+command.extend([ "-map", f"0:v:{args.videotrack}", ])
+command.extend([ "-map", f"0:a:{args.audiotrack}", ])
+
+#### Exclude Metadata, Chapters, Subtitles, and Data Streams
+command.extend([ "-map_metadata", "-1", "-map_chapters", "-1", "-sn", "-dn", ])
+
+
+#### Video Format
+command.extend([ "-c:v", "libx264", "-crf", "22", "-preset", "slower", ])
+
+#### Audio Format
+command.extend([ "-c:a", "mp3", "-b:a", "128k", ])
+
+#### Hardsubs
+command.append("-vf")
+if args.font is None:
+  command.append(f"scale=-1:720,subtitles={abs_fn}:si={args.subtrack}")
+elif args.fontsize is 0:
+  command.append(f"scale=-1:720,subtitles={abs_fn}:si={args.subtrack}:force_style='FontName={args.font}'")
+else:
+  command.append(f"scale=-1:720,subtitles={abs_fn}:si={args.subtrack}:force_style='FontName={args.font},FontSize={args.fontsize}'")
+
+#### Output File
+command.append( out_fn )
+
+print(command)
+
+subprocess.run( command )
+
+# Original bash version
+#
+# for file in "$@"
+# do
+#   fn=$(basename -- "$file")
+#   ext="${fn##*.}"
+#   name="${fn%.*}"
+#   newname=./"$name"_hardsub."$ext"
+#   ffmpeg -i "$file"
+#     -map_metadata -1 -map_chapters -1 -sn -dn \
+#     -preset slower -c:v libx264 -crf 18 -c:a mp3 -b:a 128k \
+#     -vf subtitles="$file" \
+#     "$newname"
+# done
+
+

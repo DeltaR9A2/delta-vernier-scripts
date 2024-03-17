@@ -1,0 +1,117 @@
+#!/usr/bin/python
+
+import os
+import re
+import sys
+import datetime
+import argparse
+import subprocess
+
+VERSION = 4
+
+TERMINAL_COLOR_PURPL = '\033[95m'
+TERMINAL_COLOR_GREEN =  '\033[92m'
+TERMINAL_COLOR_RESET =  '\033[0m'
+
+DRY_RUN = False
+RECURSE = False
+QUIET   = False
+SILENT  = False
+
+class RenameOperation:
+  instance_counter = 0
+
+  def __init__(self, mode, target):
+    self.mode = mode
+    self.OAP = os.path.abspath( target )
+    self.path, filename = os.path.split( self.OAP )
+    self.name, extension = os.path.splitext( filename )
+    self.ext = extension.casefold( )
+    self.ctime = datetime.datetime.fromtimestamp( os.path.getmtime( self.OAP ) ).strftime("%Y-%m-%d-%H-%M-%S")
+
+    self.n = RenameOperation.instance_counter
+    RenameOperation.instance_counter += 1
+
+    if self.mode in ("hash", "dthash"):
+      self.hash = subprocess.run( ["xxh32sum", self.OAP], capture_output=True, text=True ).stdout.strip().split(' ')[0]
+    else:
+      self.hash = "00000000"
+
+    self.clean_name = re.sub(r'[^.\/\-a-zA-Z0-9]+', '-', self.name).strip('-');
+    self.dthash_name = f"{self.ctime}-{self.hash}"
+    if self.mode == "clean":
+      self.NAP = f"{self.path}/{self.clean_name}{self.ext}"
+    elif self.mode == "dthash":
+      self.NAP = f"{self.path}/{self.dthash_name}{self.ext}"
+    elif self.mode == "hash":
+      self.NAP = f"{self.path}/xxh-{self.hash}{self.ext}"
+    elif self.mode == "number":
+      denumber_name = re.sub('^[\-\d]+', '', self.name)
+      self.NAP = f"{self.path}/{self.n:04}-00-{denumber_name}{self.ext}"
+    else:
+      raise ValueError(f"Unknown mode '{self.mode}'")
+
+  def execute( self ):
+    if( self.OAP == self.NAP ):
+      if (not QUIET) and (not SILENT):
+        print(
+          TERMINAL_COLOR_GREEN,
+          "+ No rename necessary: {}".format(
+            os.path.basename( self.NAP ) ),
+          TERMINAL_COLOR_RESET,
+        );
+    else:
+      if (not SILENT):
+        print(
+          TERMINAL_COLOR_PURPL,
+          "- Renaming {}\n      ----> {}".format(
+            os.path.basename( os.path.basename( self.OAP ) ),
+            os.path.basename( os.path.basename( self.NAP ) )
+          ),
+          TERMINAL_COLOR_RESET,
+        );
+      if not DRY_RUN:
+        subprocess.run(["mv", "-i", self.OAP, self.NAP]);
+
+
+if __name__ == "__main__":
+  parser = \
+  argparse.ArgumentParser(
+    prog = r"dvs_rename_tool",
+    description = r"""This script does various renaming operations on pathnames.
+                      Its main function is removing spaces and other problematic
+                      characters.""" )
+
+  parser.add_argument(r"mode")
+  parser.add_argument(r"target")
+  parser.add_argument(r"-n", r"--dry-run", action=r"store_true", help=r"do not rename files, print all output as normal")
+  parser.add_argument(r"-r", r"--recurse", action=r"store_true", help=r"include subfolders")
+  parser.add_argument(r"-q", r"--quiet",   action=r"store_true", help=r"only print messages that report changes")
+  parser.add_argument(r"-s", r"--silent",  action=r"store_true", help=r"do not print any messages")
+  args = parser.parse_args()
+
+  DRY_RUN = args.dry_run
+  RECURSE = args.recurse
+  QUIET   = args.quiet
+  SILENT =  args.silent
+
+  mode = str(args.mode)
+
+  abs_target = os.path.abspath( args.target )
+
+  if os.path.isfile( abs_target ):
+    RenameOperation( mode, abs_target ).execute()
+  elif os.path.isdir( abs_target ):
+    for dirpath, dirnames, filenames in os.walk( abs_target ):
+      if not RECURSE:
+        del dirnames[:] # No recursion
+      for fn in sorted(filenames):
+        RenameOperation( mode, os.path.join( dirpath, fn ) ).execute()
+  else:
+    print(f"ERROR: Invalid Target: { args.target }")
+    raise SystemExit(1)
+
+  if DRY_RUN and not (QUIET or SILENT):
+    print(r"DRY RUN: No changes were made to filesystem.")
+
+exit(0);

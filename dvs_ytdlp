@@ -1,0 +1,19 @@
+#!/bin/bash
+
+pushd ~/ytdlp ;
+  for source in $@ ;
+    do yt-dlp \
+      --ignore-config \
+      --cookies ./.cookies \
+      --restrict-filenames \
+      --format 18 \
+      -o "%(release_date,upload_date)s-%(channel).16s-[%(id)s]-[F18]-%(title).60s.%(ext)s" \
+      --yes-playlist \
+      --lazy-playlist \
+      --download-archive .ytdlp-archive \
+      --max-downloads 5 \
+      --embed-thumbnail \
+      "$source";
+    done
+  perl-rename -v "s/\A(\d\d\d\d)(\d\d)(\d\d)/\1-\2-\3/" *
+popd
