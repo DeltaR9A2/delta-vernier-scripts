@@ -46,7 +46,7 @@ class RenameOperation:
     elif self.mode == "hash":
       self.NAP = f"{self.path}/xxh-{self.hash}{self.ext}"
     elif self.mode == "number":
-      denumber_name = re.sub('^[\-\d]+', '', self.name)
+      denumber_name = re.sub(r'^[\-\d]+', '', self.name)
       self.NAP = f"{self.path}/{self.n:04}-00-{denumber_name}{self.ext}"
     else:
       raise ValueError(f"Unknown mode '{self.mode}'")
